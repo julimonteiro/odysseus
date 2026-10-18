@@ -163,14 +163,18 @@ class ProjectStore:
                     raise ProjectError('Another tracked operation is active in this directory. Wait for it to finish.', 409)
 
     def archive(self, owner, project_id):
-        p = self.get(owner, project_id)
         with self.connect(True) as db:
-            self._assert_idle(db, [p['root']])
-            if db.execute('SELECT 1 FROM projects WHERE parent_id=? AND archived=0', (project_id,)).fetchone():
-                raise ProjectError('Remove child project folders first', 409)
-            if db.execute('SELECT 1 FROM memberships WHERE project_id=?', (project_id,)).fetchone():
-                raise ProjectError("Move this project's chats to Chats or another project before removing it", 409)
-            db.execute('UPDATE projects SET archived=1 WHERE id=?', (project_id,))
+            if not db.execute("SELECT 1 FROM projects WHERE id=? AND owner=? AND archived=0", (project_id, owner)).fetchone():
+                raise ProjectError("Project not found", 404)
+            rows = db.execute("""WITH RECURSIVE subtree(id, root) AS (
+                SELECT id, root FROM projects WHERE id=? AND owner=? AND archived=0
+                UNION ALL SELECT p.id, p.root FROM projects p JOIN subtree s ON p.parent_id=s.id
+                WHERE p.owner=? AND p.archived=0
+            ) SELECT id, root FROM subtree""", (project_id, owner, owner)).fetchall()
+            self._assert_idle(db, [r['root'] for r in rows])
+            for r in rows:
+                db.execute('DELETE FROM memberships WHERE project_id=? AND owner=?', (r['id'], owner))
+                db.execute('UPDATE projects SET archived=1 WHERE id=? AND owner=?', (r['id'], owner))
 
     def attach(self, owner, project_id, session_id):
         p = self.get(owner, project_id)

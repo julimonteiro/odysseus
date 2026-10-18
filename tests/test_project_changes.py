@@ -32,3 +32,14 @@ def test_sensitive_binary_coverage_and_missing_baseline(setup):
     assert not r['changes']
     assert r['coverage']['excluded']
     assert 'secret' not in str(r)
+
+def test_delete_project_is_atomic_while_child_directory_has_active_turn(setup,tmp_path):
+    s,c,p,root=setup
+    other=tmp_path/'other';other.mkdir()
+    child=s.create('alice','Child',str(other),p['id']);s.attach('alice',p['id'],'keep-chat')
+    turn=c.begin('alice',child['id'],'running')
+    with pytest.raises(ProjectError):s.archive('alice',p['id'])
+    assert len(s.list('alice'))==2
+    assert s.memberships('alice')=={'keep-chat':p['id']}
+    c.finish(turn);s.archive('alice',p['id'])
+    assert s.list('alice')==[]

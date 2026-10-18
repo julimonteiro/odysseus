@@ -45,11 +45,19 @@ def test_browse_and_folder_creation_remain_inside_project(store,root):
     assert store.files('alice',p['id'],'a.py')['files']==['src/new/a.py']
     with pytest.raises(ProjectError):store.mkdir('alice',p['id'],'../escape')
 
-def test_project_with_chats_cannot_be_removed_until_chats_moved(store,root):
-    p=store.create('alice','Site',str(root));store.attach('alice',p['id'],'chat')
-    with pytest.raises(ProjectError):store.archive('alice',p['id'])
-    store.detach('alice','chat');store.archive('alice',p['id'])
+def test_delete_project_releases_chats_and_children_but_preserves_files(store,root):
+    (root/'keep.txt').write_text('keep')
+    p=store.create('alice','Site',str(root));child=store.create('alice','Child','',p['id'])
+    other=store.create('bob','Other',str(root))
+    store.attach('alice',p['id'],'chat');store.attach('alice',child['id'],'child-chat')
+    store.attach('bob',other['id'],'other-chat')
+    store.archive('alice',p['id'])
     assert store.list('alice')==[]
+    assert store.memberships('alice')=={}
+    assert store.memberships('bob')=={'other-chat':other['id']}
+    assert (root/'keep.txt').read_text()=='keep'
+    assert store.for_session('alice','chat') is None
+
 
 def test_git_branch_tracks_checkout_and_handles_non_repository(store,root):
     import subprocess
@@ -68,3 +76,10 @@ def test_prune_deleted_chat_memberships_preserves_live_and_other_owners(store,ro
     assert store.memberships('alice')=={'live':p['id']}
     assert store.memberships('bob')=={'bob-chat':other['id']}
     store.prune_memberships('alice',set());store.archive('alice',p['id'])
+
+def test_delete_project_with_missing_directory_still_removes_metadata(store,root):
+    p=store.create('alice','Missing',str(root));store.attach('alice',p['id'],'chat')
+    root.rmdir()
+    with pytest.raises(ProjectError):store.archive('bob',p['id'])
+    store.archive('alice',p['id'])
+    assert store.list('alice')==[] and store.memberships('alice')=={}

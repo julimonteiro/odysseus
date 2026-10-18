@@ -61,16 +61,28 @@ function renderTree() {
   const chats=sessions?.getSessions()||[];
   const visit=(parent,container)=>{
     for(const p of state.projects.filter(p=>(p.parent_id||null)===parent)) {
-      const details=node('details',undefined,'project-tree-folder');details.open=localStorage.getItem('project-open-'+p.id)!=='false';
-      details.addEventListener('toggle',()=>localStorage.setItem('project-open-'+p.id,String(details.open)));
-      const summary=node('summary');
-      summary.append(node('span','▱','project-folder-icon'),button(p.name,()=>openProject(p.id),'project-name'),button('+',()=>createChat(p.id),'project-add-chat'));
-      details.append(summary);
+      const folder=node('div',undefined,'session-folder project-tree-folder');
+      const header=node('div',undefined,'session-folder-header section-header-flex project-tree-header');
+      const content=node('div',undefined,'session-folder-content');
+      content.hidden=localStorage.getItem('project-open-'+p.id)==='false';
+      const toggle=button(content.hidden?'▶':'▼',()=>{
+        content.hidden=!content.hidden;toggle.textContent=content.hidden?'▶':'▼';
+        toggle.setAttribute('aria-expanded',String(!content.hidden));
+        localStorage.setItem('project-open-'+p.id,String(!content.hidden));
+      },'folder-toggle project-tree-toggle');
+      toggle.setAttribute('aria-label','Toggle '+p.name);toggle.setAttribute('aria-expanded',String(!content.hidden));
+      const name=button(p.name,()=>openProject(p.id),'folder-name project-name section-title');name.title=p.root;
+      const add=button('+',()=>createChat(p.id),'project-add-chat');add.title='New chat in '+p.name;add.setAttribute('aria-label',add.title);
+      const remove=button('×',()=>deleteProject(p.id),'folder-delete-btn');remove.title='Delete project';remove.setAttribute('aria-label','Delete project '+p.name);
+      header.append(toggle,name,add,remove);folder.append(header,content);
       for(const chat of chats.filter(s=>!s.archived&&state.memberships[s.id]===p.id)) {
-        const b=button(chat.name,()=>sessions.selectSession(chat.id,{keepSidebar:true}),'project-chat'+(chat.id===sid()?' is-current':''));
-        b.title=chat.name;details.append(b);
+        const row=node('div',undefined,'list-item session-item project-chat'+(chat.id===sid()?' active-session':''));
+        row.setAttribute('role','button');row.tabIndex=0;row.append(node('span',chat.name,'grow'));
+        row.addEventListener('click',()=>sessions.selectSession(chat.id,{keepSidebar:true}));
+        row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();row.click();}});
+        row.title=chat.name;content.append(row);
       }
-      visit(p.id,details);container.append(details);
+      visit(p.id,content);container.append(folder);
     }
   };
   visit(null,list);
@@ -133,6 +145,13 @@ async function moveCurrent(projectId) {
   if(!sid())throw new Error('Open a chat first');
   await api('/sessions/'+encodeURIComponent(sid()),{method:'PUT',body:JSON.stringify({project_id:projectId})});await refresh();
 }
+async function deleteProject(id) {
+  const p=project(id);if(!p)return;
+  if(!await ui.styledConfirm(`Delete project "${p.name}" and its project folders? Chats will return to Chats. Files on disk will be kept.`,{title:'Delete project',confirmText:'Delete project',danger:true}))return;
+  await api('/'+id,{method:'DELETE'});
+  if(panel){panel.hidden=true;panelProject=null;}
+  await refresh();
+}
 export async function openProject(id) {
   const p=project(id);if(!p)return;
   panelProject=id;
@@ -142,10 +161,7 @@ export async function openProject(id) {
   const branch=node('span',branchLabel(id),'project-branch');branch.id='project-branch';panel.append(branch);refreshGit().catch(()=>{});
   const toolbar=node('div',undefined,'project-toolbar');toolbar.append(button('+ Chat',()=>createChat(id)),button('+ Project folder',()=>createProject(id)),button('Move current chat here',()=>moveCurrent(id)),button('Move chat to Chats',()=>moveCurrent(null)),button('Changes',()=>showReviews(id)));
   panel.append(toolbar,node('p','Use @ to select a file. Begin a message with ! to run a terminal command directly.','project-note'));
-  const tabs=node('div',undefined,'project-toolbar');tabs.append(button('Files',()=>browseFiles(id,'.')),button('+ Directory on disk',async()=>{const path=await ui.styledPrompt?.('Directory path relative to project:');if(path){await api('/'+id+'/directories',{method:'POST',body:JSON.stringify({path})});await browseFiles(id,'.');}}),button('Remove project',async()=>{
-    if(!confirm('Remove this project from the sidebar? Files on disk will not be deleted. Move its chats to Chats first.'))return;
-    await api('/'+id,{method:'DELETE'});panel.hidden=true;await refresh();
-  }));panel.append(tabs);const body=node('div',undefined,'project-panel-body');body.id='project-panel-body';panel.append(body);
+  const tabs=node('div',undefined,'project-toolbar');tabs.append(button('Files',()=>browseFiles(id,'.')),button('+ Directory on disk',async()=>{const path=await ui.styledPrompt?.('Directory path relative to project:');if(path){await api('/'+id+'/directories',{method:'POST',body:JSON.stringify({path})});await browseFiles(id,'.');}}),button('Delete project',()=>deleteProject(id)));panel.append(tabs);const body=node('div',undefined,'project-panel-body');body.id='project-panel-body';panel.append(body);
   await browseFiles(id,'.');
 }
 async function addReference(id,path) {

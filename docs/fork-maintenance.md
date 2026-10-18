@@ -43,8 +43,9 @@ Projects and explicit terminal commands require an administrator browser
 session. Delegated API tokens do not inherit host-project authority. File
 references obey upstream sensitive-file and workspace rules. **A workspace is
 not an operating-system sandbox**: shell commands retain the host user's file
-and network access. Removing a project never deletes host files; move its chats
-out first. Files/directories on disk are created only by the explicit directory
+and network access. Deleting a project removes it and its child project folders from the sidebar,
+returns their chats to Chats, and never deletes host files. The × action on the
+project row and Delete project in its panel use the same confirmation dialog. Files/directories on disk are created only by the explicit directory
 action or commands/tools the user invokes.
 
 Reviews compare a bounded snapshot taken before the turn with eligible files
