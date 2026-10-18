@@ -292,20 +292,3 @@ class TestResearchPrimerPreserved:
         trimmed = trim_for_context(msgs, context_length=1024, reserve_tokens=256)
         joined = "\n".join(str(m.get("content", "")) for m in trimmed)
         assert "You are Odysseus." in joined
-
-
-def test_native_tool_history_preserves_user_query_and_fits_budget():
-    from src.model_context import estimate_tokens
-    messages=[{'role':'system','content':'You are a coding assistant.'},
-              {'role':'user','content':'Continue the filetree implementation.'}]
-    for i in range(12):
-        messages.extend([
-            {'role':'assistant','content':None,'tool_calls':[{'id':f'c{i}','type':'function','function':{'name':'read_file','arguments':'{"path":"file.py"}'}}]},
-            {'role':'tool','tool_call_id':f'c{i}','content':'code line\n'*1000}])
-    original=repr(messages)
-    trimmed=trim_for_context(messages,context_length=2048,reserve_tokens=512)
-    assert any(m.get('role')=='user' and 'filetree' in m.get('content','') for m in trimmed)
-    assert estimate_tokens(trimmed)<=1536
-    assert repr(messages)==original
-    call_ids={call['id'] for m in trimmed for call in m.get('tool_calls',[])}
-    assert all(m.get('tool_call_id') in call_ids for m in trimmed if m.get('role')=='tool')

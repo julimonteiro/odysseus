@@ -289,39 +289,31 @@ def trim_for_context(messages: List[Dict], context_length: int, reserve_tokens: 
             if estimate_tokens(trimmed) <= budget:
                 return _sanitize_tool_messages(essential_system + protected_msgs + convo_msgs)
 
-    # The current request is the latest USER turn, not the last message:
-    # during an agent run the tail is usually a tool response. Keep that user
-    # anchor and the latest assistant/tool batch together while evicting history.
-    groups = []
-    for msg in convo_msgs:
-        if msg.get("role") == "tool" and groups and groups[-1][0].get("tool_calls"):
-            groups[-1].append(msg)
-        else:
-            groups.append([msg])
-    anchor = next((g for g in reversed(groups) if g[0].get("role") == "user"), None)
-    latest = groups[-1] if groups else None
-    def flattened():
-        return [m for group in groups for m in group]
-    while estimate_tokens(essential_system + flattened()) > budget:
-        removable = next((i for i,g in enumerate(groups) if g is not anchor and g is not latest), None)
-        if removable is None:
-            break
-        groups.pop(removable)
-    convo_msgs = flattened()
+    # Still too big — drop older conversation turns BUT always keep the current
+    # user turn. If a pasted message alone exceeds the model context, truncate
+    # that message with a visible notice instead of dropping it; otherwise the
+    # model appears to "ignore" large pastes because it never receives them.
+    # Hermes-style: recent context matters more than old context.
+    PROTECT_RECENT = 10
+    current_msg = convo_msgs[-1:] if convo_msgs else []
+    prior_convo = convo_msgs[:-1] if convo_msgs else []
+    if len(prior_convo) >= PROTECT_RECENT:
+        old_msgs = prior_convo[:-(PROTECT_RECENT - 1)]
+        recent_msgs = prior_convo[-(PROTECT_RECENT - 1):] + current_msg
+        while old_msgs and estimate_tokens(essential_system + old_msgs + recent_msgs) > budget:
+            old_msgs.pop(0)
+        convo_msgs = old_msgs + recent_msgs
+    else:
+        convo_msgs = prior_convo + current_msg
+        while prior_convo and estimate_tokens(essential_system + prior_convo + current_msg) > budget:
+            prior_convo.pop(0)
+        convo_msgs = prior_convo + current_msg
 
-    # A single tool output or pasted request can itself exceed the window.
-    # Shrink oversized payloads without mutating history or losing tool IDs.
-    for _ in range(len(convo_msgs) * 4 + 4):
-        used = estimate_tokens(essential_system + convo_msgs)
-        if used <= budget or not convo_msgs:
-            break
-        index = max(range(len(convo_msgs)), key=lambda i: estimate_tokens([convo_msgs[i]]))
-        size = estimate_tokens([convo_msgs[index]])
-        allowance = max(32, size - (used - budget) - 16)
-        smaller = _truncate_message_to_token_budget(convo_msgs[index], allowance)
-        if estimate_tokens([smaller]) >= size:
-            break
-        convo_msgs[index] = smaller
+    # If the current message itself is too large, shrink only that message.
+    if current_msg and estimate_tokens(essential_system + protected_msgs + convo_msgs) > budget:
+        prefix = essential_system + protected_msgs + convo_msgs[:-1]
+        available_for_current = max(64, budget - estimate_tokens(prefix))
+        convo_msgs[-1] = _truncate_message_to_token_budget(convo_msgs[-1], available_for_current)
 
     result = _sanitize_tool_messages(essential_system + protected_msgs + convo_msgs)
     logger.info(f"Trimmed to {estimate_tokens(result)} tokens ({len(result)} messages)")
