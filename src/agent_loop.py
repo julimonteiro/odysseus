@@ -4848,20 +4848,28 @@ async def stream_agent_loop(
                     state["messages"],
                 )
                 state["request_messages"] = request_messages
-            _last_route_request_messages = request_messages
             state["context_length"] = _route_context_lengths.get(
                 (candidate_url, candidate_model),
                 context_length,
             )
             _last_route_context_length = state["context_length"]
-            run_security.observe_messages(request_messages)
             candidate_tools = _tool_schemas_for_route(state)
+            from src.project_request_budget import fit_local_request
+            from src.llm_core import _get_http_client
+            request_messages, candidate_output_cap = await fit_local_request(
+                _get_http_client(), candidate_url, candidate_model, request_messages,
+                candidate_tools, state["context_length"], max_tokens, candidate_headers,
+            )
+            state["request_messages"] = request_messages
+            _last_route_request_messages = request_messages
+            run_security.observe_messages(request_messages)
             state["tools"] = candidate_tools
             _candidate_request_states[index] = state
             return {
                 "messages": request_messages,
                 "kwargs": {
                     "tools": candidate_tools or None,
+                    "max_tokens": candidate_output_cap,
                     "tool_choice_none": state["ody_doc_finetune_mode"],
                     "temperature": (
                         _ody_qwen_temperature_cap(_requested_temperature)
