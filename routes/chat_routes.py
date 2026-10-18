@@ -1160,7 +1160,7 @@ def setup_chat_routes(
             _verify_session_owner(request, session)
             sess = session_manager.get_session(session)
             owner = effective_user(request)
-            from src.project_turns import resolve_project_context, begin_project_review, terminal_stream, project_agent_tools
+            from src.project_turns import resolve_project_context, begin_project_review, terminal_stream, project_agent_tools, settle_project_predecessor
             from src.project_terminal import command_from_message
             from src.projects import ProjectError
             try:
@@ -1172,6 +1172,8 @@ def setup_chat_routes(
                     workspace_rejected = None
             except (ProjectError, json.JSONDecodeError, TypeError) as exc:
                 raise HTTPException(getattr(exc, "status", 400), str(exc)) from exc
+            if _project:
+                await settle_project_predecessor(session)
             _direct_command = command_from_message(_raw_project_message)
             if isinstance(_raw_project_message, str) and _raw_project_message.startswith("!") and not tool_approval_id:
                 from routes.project_routes import project_owner

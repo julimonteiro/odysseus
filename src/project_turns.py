@@ -9,7 +9,7 @@ from src.project_changes import ProjectChanges
 from src.project_terminal import execute_command
 
 
-PROJECT_FILE_TOOLS = frozenset({'get_workspace','ls','glob','grep','read_file','write_file','edit_file','apply_patch'})
+PROJECT_FILE_TOOLS = frozenset({'get_workspace','ls','glob','grep','read_file','write_file','edit_file','apply_patch','todowrite','update_plan'})
 
 
 def project_agent_tools(project, disabled=(), plan_mode=False):
@@ -35,6 +35,18 @@ def resolve_project_context(request, session_id, posted_project, references, sto
         raise ProjectError('File references require a project chat')
     text = store.references(owner, project['id'], references) if references and project else ''
     return project, text
+
+
+async def settle_project_predecessor(session_id, timeout=10):
+    """Finish the replaced run's snapshot cleanup before acquiring its directory."""
+    from src import agent_runs
+    run = agent_runs.get_active_run(session_id)
+    if run is None or run.task is None:
+        return
+    agent_runs.stop(session_id, run.run_id)
+    done, _ = await asyncio.wait({run.task}, timeout=timeout)
+    if not done:
+        raise HTTPException(409, 'The previous operation is stopping. Wait for cleanup, then retry.')
 
 
 def begin_project_review(owner, project, session_id):
