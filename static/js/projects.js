@@ -126,7 +126,7 @@ export async function createProject(parentId=null) {
   const {overlay,box}=dialog(parentId?'New project folder':'New project');
   const form=node('form');const name=inputField('Name');name.input.required=true;name.input.maxLength=100;
   const root=inputField('Directory on the Odysseus host',parentId?project(parentId)?.root:'');root.input.required=true;
-  form.append(name.wrap,root.wrap,button('Browse directories',()=>workspace.openWorkspaceBrowser({initialPath:root.input.value,onSelect:p=>{root.input.value=p;}})));
+  form.append(name.wrap,root.wrap,button('Browse directories',()=>workspace.openWorkspaceBrowser({parentModal:overlay,returnFocus:root.input,initialPath:root.input.value,onSelect:p=>{root.input.value=p;}})));
   form.append(node('p','A project groups chats around an existing directory. Removing it does not delete your files.','project-note'));
   const submit=node('button','Create project','project-button project-primary');submit.type='submit';form.append(submit);
   form.addEventListener('submit',async e=>{e.preventDefault();submit.disabled=true;try{const p=await api('',{method:'POST',body:JSON.stringify({name:name.input.value,root:root.input.value,parent_id:parentId})});overlay.remove();await refresh();await openProject(p.id);}catch(err){report(err);submit.disabled=false;}});

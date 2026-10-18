@@ -15,6 +15,8 @@ const _FOLDER_SVG = '<svg class="workspace-row-icon" width="15" height="15" view
 let _modal = null;
 let _curPath = '';
 let _selectionCallback = null;
+let _parentModal = null;
+let _returnFocus = null;
 
 export function getWorkspace() {
   return Storage.get(KEYS.WORKSPACE, '') || '';
@@ -144,6 +146,8 @@ function _getModal() {
   _modal = document.createElement('div');
   _modal.id = 'workspace-modal';
   _modal.className = 'modal';
+  _modal.setAttribute('role', 'dialog');
+  _modal.setAttribute('aria-label', 'Select workspace');
   _modal.style.display = 'none';
   _modal.innerHTML = `
     <div class="modal-content">
@@ -190,9 +194,14 @@ function _getModal() {
 export async function openWorkspaceBrowser(options = {}) {
   _selectionCallback = options.onSelect || null;
   const modal = _getModal();
+  _parentModal = options.parentModal || null;
+  _returnFocus = options.returnFocus || document.activeElement;
+  modal.style.zIndex = _parentModal ? String((parseInt(getComputedStyle(_parentModal).zIndex, 10) || 0) + 1) : '';
+  modal.setAttribute('aria-modal', 'true');
   modal.style.display = 'flex';
   try {
     _render(await _load(options.initialPath || getWorkspace() || ''));
+    modal.querySelector('#workspace-cur-path').focus();
   } catch (e) {
     if (uiModule && uiModule.showError) uiModule.showError('Could not browse folders');
   }
@@ -200,7 +209,14 @@ export async function openWorkspaceBrowser(options = {}) {
 
 export function closeWorkspaceBrowser() {
   _selectionCallback = null;
-  if (_modal) _modal.style.display = 'none';
+  if (_modal) {
+    _modal.style.display = 'none';
+    _modal.style.zIndex = '';
+    _modal.removeAttribute('aria-modal');
+  }
+  if (_returnFocus?.isConnected) _returnFocus.focus();
+  _parentModal = null;
+  _returnFocus = null;
 }
 
 export function initWorkspace() {
