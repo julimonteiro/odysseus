@@ -120,3 +120,7 @@ compound.config.json
 *.error.log
 _scratch/
 /odysseus/
+
+# Fork development scratch and isolated test state
+.superpowers/
+.dev-state/

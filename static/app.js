@@ -5,6 +5,7 @@
 import Storage from './js/storage.js';
 import uiModule from './js/ui.js';
 import workspaceModule from './js/workspace.js';
+import projectsModule from './js/projects.js';
 import fileHandlerModule from './js/fileHandler.js';
 import modelsModule from './js/models.js?v=20260715startupcalm2';
 import ragModule from './js/rag.js';
@@ -57,6 +58,7 @@ import { initSectionCollapse, initSectionDrag } from './js/section-management.js
 const API_BASE = window.location.origin;
 window.themeModule = themeModule;
 window.sessionModule = sessionModule;
+window.projectsModule = projectsModule;
 window.uiModule = uiModule;
 window.adminModule = adminModule;
 window.cookbookModule = cookbookModule;
@@ -1967,6 +1969,7 @@ function initializeEventListeners() {
   setupToggle('web-toggle-btn', 'web-toggle', 'web');
   setupToggle('bash-toggle-btn', 'bash-toggle', 'bash');
   try { workspaceModule.initWorkspace(); } catch (_) {}
+  projectsModule.initProjects(sessionModule).catch(e => console.warn("Projects initialization:", e));
 
   // Document editor toggle (special: uses module panel, not a checkbox)
   function bringOpenDocumentToFrontOnMobile() {

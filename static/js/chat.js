@@ -624,6 +624,7 @@ import { loadPanel } from './panels.js';
   const _resumingStreams = new Set();   // sessionId -> a resumeStream() reader is live (re-attach lock)
   const _terminalSavedStreams = new Set(); // sessionId -> canonical terminal event seen by active reader
   const _streamRunIds = new Map();      // sessionId -> opaque identity of the current send's detached run
+  const _directStreamGenerations = new Map();
   const _streamGenerations = new Map(); // sessionId -> generation of the current (latest) send
   const _sendStates = new Map();        // sessionId -> { generation, abortCtrl } of the current send, installed synchronously at send commit so Stop never has to borrow an older send's controller
   const _pendingRunStops = new Map();   // 'sessionId:generation' -> abortCtrl|null; Stop queued for that send while it awaits headers. Keyed per send so concurrent sends' cancellation intents never displace each other.
@@ -683,6 +684,7 @@ import { loadPanel } from './panels.js';
   /** Stop only the exact detached run whose identity this browser observed. */
   function _stopExactRun(sessionId, abortCtrl = null) {
     if (!sessionId) return false;
+    if (_directStreamGenerations.get(sessionId) === _streamGenerations.get(sessionId)) return true;
     const runId = _streamRunIds.get(sessionId);
     if (!runId) {
       // Queue against the CURRENT send's generation: its POST is the only
@@ -1828,7 +1830,7 @@ import { loadPanel } from './panels.js';
       if (_inject.suffix) _finalMsgWithInject = _finalMsgWithInject + ' ' + _inject.suffix;
 
       const fd = new FormData();
-      fd.append('message', approvalForSend ? '' : _finalMsgWithInject);
+      fd.append('message', approvalForSend ? '' : msg.startsWith('!') ? msg : _finalMsgWithInject);
       fd.append('session', streamSessionId);
       if (approvalForSend) {
         fd.append('tool_approval_id', approvalForSend.approval_id);
@@ -1926,6 +1928,7 @@ import { loadPanel } from './panels.js';
       if (_ws) {
         fd.append('workspace', _ws);
       }
+      window.projectsModule?.decorateRequest(fd, streamSessionId, msg);
       if (presetsModule.getSelectedPreset()) {
         fd.append('preset_id', presetsModule.getSelectedPreset());
       }
@@ -2131,6 +2134,15 @@ import { loadPanel } from './panels.js';
         typewriterInto(holder.querySelector('.body'), errText);
         enableResearchBtn();
         return;
+      }
+      if (res.headers.get('X-Odysseus-Direct-Stream') === 'terminal') {
+        if (_streamGenerations.get(streamSessionId) === streamGeneration) {
+          _directStreamGenerations.set(streamSessionId, streamGeneration);
+        }
+        const pendingKey = streamSessionId + ':' + streamGeneration;
+        const pendingAbort = _pendingRunStops.get(pendingKey);
+        _pendingRunStops.delete(pendingKey);
+        if (pendingAbort && !pendingAbort.signal.aborted) pendingAbort.abort();
       }
       const streamRunId = res.headers.get('X-Odysseus-Run-Id') || '';
       if (streamRunId) _rememberStreamRunId(streamSessionId, streamRunId, streamGeneration);

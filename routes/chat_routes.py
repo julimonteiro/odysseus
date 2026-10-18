@@ -978,6 +978,7 @@ def setup_chat_routes(
 
         form_data = await request.form()
         message = form_data.get("message")
+        _raw_project_message = message if message is not None else (body or {}).get("message")
         session = form_data.get("session")
         attachments = form_data.get("attachments")
         use_web = form_data.get("use_web")
@@ -1159,6 +1160,29 @@ def setup_chat_routes(
             _verify_session_owner(request, session)
             sess = session_manager.get_session(session)
             owner = effective_user(request)
+            from src.project_turns import resolve_project_context, begin_project_review, terminal_stream
+            from src.project_terminal import command_from_message
+            from src.projects import ProjectError
+            try:
+                _refs = json.loads(form_data.get("project_files") or (body or {}).get("project_files_json") or "[]")
+                _project, _project_reference_text = resolve_project_context(
+                    request, session, form_data.get("project_id") or (body or {}).get("project_id"), _refs)
+                if _project:
+                    workspace = _project["root"]
+                    workspace_rejected = None
+            except (ProjectError, json.JSONDecodeError, TypeError) as exc:
+                raise HTTPException(getattr(exc, "status", 400), str(exc)) from exc
+            _direct_command = command_from_message(_raw_project_message)
+            if isinstance(_raw_project_message, str) and _raw_project_message.startswith("!") and not tool_approval_id:
+                from routes.project_routes import project_owner
+                project_owner(request)
+                if not _direct_command:
+                    raise HTTPException(400, "Type a command after !")
+                if not workspace:
+                    raise HTTPException(400, "Choose a project directory or workspace before running a terminal command")
+                _terminal_turn = begin_project_review(owner, _project, session)
+                return StreamingResponse(terminal_stream(_direct_command, message, workspace, sess, session_manager, _terminal_turn),
+                                         media_type="text/event-stream", headers={"X-Odysseus-Direct-Stream": "terminal"})
             if tool_approval_id:
                 _reject_delegated_tool_approval(request)
                 pending_tool_approval = tool_approval_store.peek(tool_approval_id)
@@ -1384,6 +1408,17 @@ def setup_chat_routes(
             ),
             persist_user_message=not tool_approval_continuation,
         )
+
+        if _project_reference_text:
+            _ref_message = untrusted_context_message("selected project files", _project_reference_text)
+            ctx.messages.insert(len(ctx.preface), _ref_message)
+            if foreground_policy.enabled:
+                getattr(ctx, "route_messages", ctx.messages).insert(len(getattr(ctx, "route_preface", ctx.preface)), dict(_ref_message))
+            from src.model_context import estimate_tokens
+            _reference_limit = max(1024, int(ctx.context_length or 16384) - 2048)
+            if estimate_tokens(ctx.messages) > _reference_limit:
+                raise HTTPException(413, "Selected project files exceed this model's context. Reference fewer or smaller files.")
+            external_untrusted_context_seen = True
 
         _research_flags = {"do": do_research}  # Mutable container for generator scope
 
@@ -2590,14 +2625,20 @@ def setup_chat_routes(
                 finally:
                     _active_streams.pop(session, None)
 
+        _project_review = begin_project_review(owner, _project, session)
+
         async def _safe_stream() -> AsyncGenerator[str, None]:
             """Wrapper that guarantees _active_streams cleanup even if stream_with_save
             raises before reaching a mode-specific finally block."""
+            _review_interrupted = True
             try:
                 async for chunk in stream_with_save():
                     yield chunk
+                _review_interrupted = False
             finally:
                 _active_streams.pop(session, None)
+                from src.project_turns import finish_project_review
+                finish_project_review(_project_review, _review_interrupted)
 
         # Compare panes are short-lived, single-shot generations whose sessions
         # exist only to drive that one pane — there's nothing to "resume" and

@@ -79,3 +79,8 @@ Deployment details are in the [setup guide](website/setup.md#security-notes).
 ## License
 
 AGPL-3.0-or-later -- see [LICENSE](LICENSE) and [ACKNOWLEDGMENTS.md](ACKNOWLEDGMENTS.md).
+
+
+## Projects fork
+
+This fork adds directory-backed Projects, project chats, @file references, side-by-side change review, Git branch indicators and direct `!` terminal commands. See [setup, use and upstream merge instructions](docs/fork-maintenance.md).

@@ -14,6 +14,7 @@ const API_BASE = window.location.origin;
 const _FOLDER_SVG = '<svg class="workspace-row-icon" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 let _modal = null;
 let _curPath = '';
+let _selectionCallback = null;
 
 export function getWorkspace() {
   return Storage.get(KEYS.WORKSPACE, '') || '';
@@ -172,8 +173,12 @@ function _getModal() {
     }
   });
   _modal.querySelector('#workspace-use').addEventListener('click', () => {
-    setWorkspace(_curPath);
-    if (uiModule && uiModule.showToast) uiModule.showToast(`Workspace set: ${_basename(_curPath)}`);
+    const callback = _selectionCallback;
+    if (callback) callback(_curPath);
+    else {
+      setWorkspace(_curPath);
+      if (uiModule && uiModule.showToast) uiModule.showToast(`Workspace set: ${_basename(_curPath)}`);
+    }
     closeWorkspaceBrowser();
   });
   const content = _modal.querySelector('.modal-content');
@@ -182,17 +187,19 @@ function _getModal() {
   return _modal;
 }
 
-export async function openWorkspaceBrowser() {
+export async function openWorkspaceBrowser(options = {}) {
+  _selectionCallback = options.onSelect || null;
   const modal = _getModal();
   modal.style.display = 'flex';
   try {
-    _render(await _load(getWorkspace() || ''));
+    _render(await _load(options.initialPath || getWorkspace() || ''));
   } catch (e) {
     if (uiModule && uiModule.showError) uiModule.showError('Could not browse folders');
   }
 }
 
 export function closeWorkspaceBrowser() {
+  _selectionCallback = null;
   if (_modal) _modal.style.display = 'none';
 }
 

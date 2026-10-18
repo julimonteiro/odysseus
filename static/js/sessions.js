@@ -285,6 +285,7 @@ let _sessionListFocused = false;
 function _deselectCurrentSession(sid) {
   if (currentSessionId !== sid) return;
   currentSessionId = null;
+  window.projectsModule?.onSessionChanged(currentSessionId);
   uiModule.el('chat-history').innerHTML = '';
   uiModule.el('current-meta').textContent = 'Odysseus Chat';
   Storage.remove('lastSessionId');
@@ -1080,7 +1081,7 @@ function _renderSessionListImpl() {
 
   // Get saved order from localStorage
   const savedOrder = Storage.get('session-order');
-  let orderedSessions = sessions.filter(s => !s.archived && s.folder !== 'Assistant' && !_isIncognitoSession(s.id) && (s.name || '').trim() !== 'Nobody' && (s.name || '').trim() !== 'Incognito');
+  let orderedSessions = sessions.filter(s => !window.projectsModule?.isProjectSession(s.id) && !s.archived && s.folder !== 'Assistant' && !_isIncognitoSession(s.id) && (s.name || '').trim() !== 'Nobody' && (s.name || '').trim() !== 'Incognito');
 
   if (savedOrder) {
     try {
@@ -1699,6 +1700,7 @@ export async function loadSessions() {
       throw new Error('Session request returned an invalid response');
     }
     sessions = _normalizeSessionsList(fetched);
+    window.projectsModule?.onSessionChanged(currentSessionId);
     renderSessionList();
 
     const sessionsSection = uiModule.el('sessions-section');
@@ -1856,6 +1858,7 @@ export async function selectSession(id, { keepSidebar = false, showLoading = tru
       try { window.documentModule.clearSelection(); } catch {}
     }
     currentSessionId = id;
+    window.projectsModule?.onSessionChanged(currentSessionId);
     try { window.__odysseusLastSelectedSessionId = id; } catch (_) {}
     // Identify Assistant / task-output sessions so we don't "trap" the user
     // there on return. Skipped from both `lastSessionId` persistence and the
@@ -2225,6 +2228,7 @@ export function createDirectChat(url, modelId, endpointId, opts = {}) {
   _skipAutoSelect = true;
   _suppressNextSessionLoading = true;
   currentSessionId = null;
+  window.projectsModule?.onSessionChanged(currentSessionId);
   try { window.__odysseusLastSelectedSessionId = ''; } catch (_) {}
   Storage.remove('lastSessionId');
   history.replaceState(null, '', window.location.pathname);
@@ -2334,6 +2338,7 @@ export async function materializePendingSession() {
     }
     _pendingChat = null;
     currentSessionId = payload.id;
+    window.projectsModule?.onSessionChanged(currentSessionId);
     if (!isIncognito) {
       Storage.set('lastSessionId', payload.id);
       history.replaceState(null, '', '#' + payload.id);
@@ -2405,6 +2410,7 @@ export function getCurrentEndpointUrl() {
 export function setCurrentSessionId(id) {
   _sessionNavToken++;
   currentSessionId = id;
+  window.projectsModule?.onSessionChanged(currentSessionId);
   try { window.__odysseusLastSelectedSessionId = id || ''; } catch (_) {}
   if (!id) {
     _suppressNextSessionLoading = true;
@@ -2915,6 +2921,7 @@ async function _arcPeekOpen(sid) {
 
     // Set as current session so chat renders
     currentSessionId = sid;
+    window.projectsModule?.onSessionChanged(currentSessionId);
 
     // Find the archived session metadata
     const meta = _arc.data.find(s => s.id === sid);

@@ -245,6 +245,7 @@
        real request is discarded and the font fetched a second time. -->
   <link rel="preload" as="font" type="font/woff2" crossorigin href="/static/fonts/FiraCode-Regular.woff2">
   <link rel="preload" as="font" type="font/woff2" crossorigin href="/static/fonts/FiraCode-SemiBold.woff2">
+  <link rel="stylesheet" href="/static/css/projects.css?v=1">
   <link rel="stylesheet" href="/static/style.css?v=20260808startupshell1">
   <link rel="modulepreload" href="/static/app.js?v=20260815toolapproval4">
   <link rel="modulepreload" href="/static/js/chat.js?v=20260815toolapproval4">
@@ -770,6 +771,13 @@
            assistant session is still maintained for log_to_assistant()
            writes from scheduled tasks. -->
 
+      <div class="section" id="projects-section" hidden>
+        <div class="section-header-flex">
+          <span class="section-title"><span class="section-icon" aria-hidden="true">▱</span><span class="section-title-label">Projects</span></span>
+          <button type="button" id="project-create-btn" class="section-header-btn" aria-label="New project" title="New project">+</button>
+        </div>
+        <div id="project-list"></div>
+      </div>
       <div class="section" id="sessions-section">
         <div class="section-header-flex">
           <span class="section-title" id="chats-section-title"><svg class="section-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg><span id="chats-section-label" class="section-title-label">Chats</span><span id="chats-notif-dot" class="sidebar-notif-dot" style="display:none"></span></span>
