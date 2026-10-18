@@ -87,12 +87,31 @@ class ProjectChanges:
         return [{**{k: r[k] for k in ['id', 'session_id', 'status', 'started', 'finished']},
                  'summary': json.loads(r['summary']) if r['summary'] else None} for r in rows]
 
-    def file_diff(self, owner, project_id, turn, relative):
-        self.store.get(owner, project_id)
+    def list_session(self, owner, session_id, cursor=None, limit=40):
+        limit = max(1, min(int(limit), 100))
         with self.store.connect() as db:
-            r = db.execute('SELECT * FROM turns WHERE id=? AND owner=? AND project_id=?', (turn, owner, project_id)).fetchone()
-        if not r:
+            args = [owner, session_id]
+            clause = ''
+            if cursor:
+                previous = db.execute('SELECT started,id FROM turns WHERE id=? AND owner=? AND session_id=?', (cursor, owner, session_id)).fetchone()
+                if not previous:
+                    raise ProjectError('Review cursor not found', 404)
+                clause = ' AND (started<? OR (started=? AND id<?))'
+                args.extend([previous['started'], previous['started'], previous['id']])
+            rows = db.execute('SELECT * FROM turns WHERE owner=? AND session_id=?'+clause+' ORDER BY started DESC,id DESC LIMIT ?', (*args, limit+1)).fetchall()
+        page = rows[:limit]
+        return {'reviews': [{**{k:r[k] for k in ['id','project_id','session_id','status','started','finished']},
+                             'summary':json.loads(r['summary']) if r['summary'] else None} for r in page],
+                'next_cursor': page[-1]['id'] if len(rows)>limit else None}
+
+    def session_file_diff(self, owner, session_id, turn, relative):
+        with self.store.connect() as db:
+            exists = db.execute('SELECT 1 FROM turns WHERE id=? AND owner=? AND session_id=?', (turn, owner, session_id)).fetchone()
+        if not exists:
             raise ProjectError('Review not found', 404)
+        return self._snapshot_file(turn, relative)
+
+    def _snapshot_file(self, turn, relative):
         try:
             result = json.loads(self._path(turn, 'result').read_text())
         except FileNotFoundError as exc:
@@ -101,3 +120,11 @@ class ProjectChanges:
             if c['path'] == relative:
                 return c
         raise ProjectError('Changed file not found', 404)
+
+    def file_diff(self, owner, project_id, turn, relative):
+        self.store.get(owner, project_id)
+        with self.store.connect() as db:
+            r = db.execute('SELECT * FROM turns WHERE id=? AND owner=? AND project_id=?', (turn, owner, project_id)).fetchone()
+        if not r:
+            raise ProjectError('Review not found', 404)
+        return self._snapshot_file(turn, relative)

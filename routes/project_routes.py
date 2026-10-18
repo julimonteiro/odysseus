@@ -81,6 +81,18 @@ def setup_project_routes(store=None):
         assert_chat_owner(owner, session_id)
         return {'project': call(store.for_session, owner, session_id)}
 
+    @router.get('/sessions/{session_id}/reviews')
+    def chat_reviews(session_id: str, request: Request, cursor: str | None = Query(None, max_length=32)):
+        owner = project_owner(request)
+        assert_chat_owner(owner, session_id)
+        return call(changes.list_session, owner, session_id, cursor)
+
+    @router.get('/sessions/{session_id}/reviews/{turn_id}/file')
+    def chat_review_file(session_id: str, turn_id: str, request: Request, path: str = Query(..., max_length=4096)):
+        owner = project_owner(request)
+        assert_chat_owner(owner, session_id)
+        return call(changes.session_file_diff, owner, session_id, turn_id, path)
+
     @router.delete('/{project_id}')
     def archive(project_id: str, request: Request):
         owner = project_owner(request)

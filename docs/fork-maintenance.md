@@ -27,8 +27,7 @@ intended host directories into the container and select their container paths.
    directly, without sending it to the model. The composer changes to Terminal
    mode before submission. Example: `!git status`. Output is streamed into the
    chat, and the exit code is retained with history.
-5. Open **Changes** after a project turn. Select a file to see original text on
-   the left and changed text on the right.
+5. Open **Changes** beside the chat title/context indicator to browse this conversation’s tracked turns, including older pages. Select a file to see original text on the left and changed text on the right. Project-panel Changes still lists recent project turns. Snapshots remain readable from the conversation after its project is removed. Untracked historical changes cannot be reconstructed.
 
 `!` commands run in a fresh shell in the bound directory. For multiple steps,
 use `!cd subdirectory && command`. Shell state is not retained between messages;
@@ -36,6 +35,14 @@ interactive programs that require a TTY or input are not supported. Commands
 stop after 120 seconds and output is capped at 256 KiB. A disconnected terminal
 stream cancels its process group on POSIX. Explicit user commands are separate
 from agent-generated shell tool calls; upstream agent approval checks remain.
+
+## Project file work
+
+Project membership provides a deterministic small file-tool set on every agent turn, including short/non-English continuations. It does not depend on English keywords or vector retrieval. Global/user tool restrictions, Plan mode, delegated-token restrictions and sealed-action approvals still apply. An approval shown in the chat must be accepted before its write occurs.
+
+The native tools are `get_workspace`, `ls`, `glob`, `grep`, `read_file`, `write_file`, `edit_file` and `apply_patch`. Search uses ripgrep when installed and a bounded fallback otherwise; `read_file` supports line offsets/limits. Locate relevant code, read focused ranges, and apply precise edits. These operations work on text across languages and architectures without building a language-specific index of the entire repository. They do not guarantee that a model understands every language or makes correct edits.
+
+`!` is reserved for direct terminal execution; app slash commands use `/`. The compact composer badge displays project/branch while the directory remains in the workspace/project panel.
 
 ## Access and change review boundaries
 

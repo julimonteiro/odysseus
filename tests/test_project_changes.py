@@ -43,3 +43,19 @@ def test_delete_project_is_atomic_while_child_directory_has_active_turn(setup,tm
     assert s.memberships('alice')=={'keep-chat':p['id']}
     c.finish(turn);s.archive('alice',p['id'])
     assert s.list('alice')==[]
+
+def test_conversation_reviews_are_owned_paginated_and_survive_project_removal(setup):
+    s,c,p,root=setup
+    (root/'code.py').write_text('a=1\n')
+    first=c.begin('alice',p['id'],'chat-a');(root/'code.py').write_text('a=2\n');c.finish(first)
+    other=c.begin('alice',p['id'],'chat-b');(root/'code.py').write_text('a=3\n');c.finish(other)
+    second=c.begin('alice',p['id'],'chat-a');(root/'code.py').write_text('a=4\n');c.finish(second)
+    s.archive('alice',p['id'])
+    page=c.list_session('alice','chat-a',limit=1)
+    assert [r['id'] for r in page['reviews']]==[second]
+    older=c.list_session('alice','chat-a',cursor=page['next_cursor'],limit=1)
+    assert [r['id'] for r in older['reviews']]==[first] and older['next_cursor'] is None
+    assert c.list_session('bob','chat-a')['reviews']==[]
+    assert c.session_file_diff('alice','chat-a',first,'code.py')['after']=='a=2\n'
+    with pytest.raises(ProjectError):c.session_file_diff('alice','chat-b',first,'code.py')
+    with pytest.raises(ProjectError):c.list_session('alice','chat-a',cursor=other)

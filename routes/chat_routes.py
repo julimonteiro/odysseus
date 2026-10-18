@@ -1160,7 +1160,7 @@ def setup_chat_routes(
             _verify_session_owner(request, session)
             sess = session_manager.get_session(session)
             owner = effective_user(request)
-            from src.project_turns import resolve_project_context, begin_project_review, terminal_stream
+            from src.project_turns import resolve_project_context, begin_project_review, terminal_stream, project_agent_tools
             from src.project_terminal import command_from_message
             from src.projects import ProjectError
             try:
@@ -1318,6 +1318,11 @@ def setup_chat_routes(
                     _workspace_agent_intent = True
                     allow_bash = "true"
                     logger.info("chat→agent auto-escalation: explicit path workspace=%s", workspace)
+            if _project:
+                # Project membership is persistent file-work intent, including
+                # Portuguese requests and short continuations missed by RAG.
+                chat_mode = 'agent'
+                _workspace_agent_intent = True
         except SessionNotFoundError as e:
             raise HTTPException(404, str(e))
         except (ValueError, ValidationError):
@@ -1529,7 +1534,7 @@ def setup_chat_routes(
         _explicit_web_intent = _explicit_web_intent or bool(_tool_intent and _tool_intent.category == "web")
         if is_web_search_explicitly_denied(allow_web_search) or not _search_enabled:
             disabled_tools.update(WEB_TOOL_NAMES)
-        if _explicit_web_intent:
+        if _explicit_web_intent and not _project:
             # A direct lookup/search request should not drift into personal
             # tools or shell fallbacks. It can only use web_search/web_fetch
             # when the request's explicit web setting enabled them.
@@ -1610,7 +1615,7 @@ def setup_chat_routes(
         # the heavy "do things on the computer" tools — otherwise the model
         # tries to shell out for a request that never needed it, then fails
         # (and looks broken when the shell is disabled).
-        if auto_escalated and not _workspace_agent_intent:
+        if auto_escalated and not _workspace_agent_intent and not _project:
             disabled_tools.update({
                 "bash", "python", "read_file", "write_file",
             })
@@ -2360,13 +2365,14 @@ def setup_chat_routes(
                         _max_rounds = _DEFAULT_ROUNDS
                     _max_rounds = max(1, min(_max_rounds, 200))
 
-                    _forced_tools = None
+                    _project_tools = project_agent_tools(_project, disabled_tools, plan_mode) if not exact_tool_approval else set()
+                    _forced_tools = set(_project_tools)
                     if _search_enabled:
-                        _forced_tools = set(WEB_TOOL_NAMES)
+                        _forced_tools |= set(WEB_TOOL_NAMES)
                         if _explicit_browser_intent:
                             _forced_tools |= set(_BROWSER_MCP_TOOLS)
                     elif _explicit_browser_intent:
-                        _forced_tools = set(_BROWSER_MCP_TOOLS)
+                        _forced_tools |= set(_BROWSER_MCP_TOOLS)
 
                     async for chunk in stream_agent_loop(
                         sess.endpoint_url,
@@ -2398,7 +2404,7 @@ def setup_chat_routes(
                             if exact_tool_approval
                             and pending_tool_approval
                             and pending_tool_approval.selected_tools
-                            else None
+                            else (_project_tools or None)
                         ),
                         forced_tools=_forced_tools,
                         uploaded_files=ctx.uploaded_files,

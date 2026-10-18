@@ -6270,7 +6270,7 @@ function _fuzzyMatch(typed, maxDist) {
 
 // ── Command prefix ──────────────────────────────────────────────
 
-function _isCmd(str) { return str.startsWith('/') || str.startsWith('!'); }
+function _isCmd(str) { return str.startsWith('/'); }
 
 // ── Main dispatcher ───────────────────────────────────────────────
 

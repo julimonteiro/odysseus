@@ -1030,10 +1030,12 @@ class GetWorkspaceTool:
     it; the shell starts there (cwd) but is NOT sandboxed."""
     async def execute(self, content: str, ctx: dict) -> dict:
         from src.tool_execution import get_active_workspace
+        import platform
+        runtime = f"Server OS: {platform.system()} ({platform.machine()}). Files belong to the server filesystem.\n"
         ws = get_active_workspace()
         if ws:
             return {
-                "output": f"{ws}\n(File tools are confined to this folder; the shell starts "
+                "output": f"{ws}\n" + runtime + "(File tools are confined to this folder; the shell starts "
                           f"here but is not sandboxed and can reach outside it.)",
                 "exit_code": 0,
             }

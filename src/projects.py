@@ -94,6 +94,7 @@ class ProjectStore:
               CREATE TABLE IF NOT EXISTS turns (id TEXT PRIMARY KEY, owner TEXT NOT NULL, project_id TEXT NOT NULL,
                 session_id TEXT, root TEXT NOT NULL, status TEXT NOT NULL, pid INTEGER, started REAL NOT NULL,
                 finished REAL, summary TEXT);
+              CREATE INDEX IF NOT EXISTS turns_session_history ON turns(owner,session_id,started DESC,id DESC);
             ''')
         try:
             self.db_path.chmod(0o600)

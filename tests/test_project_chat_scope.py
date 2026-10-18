@@ -20,3 +20,14 @@ def test_archived_project_never_falls_back_to_global_workspace(scoped):
     s,p,r=scoped
     with s.connect(True) as db:db.execute('UPDATE projects SET archived=1 WHERE id=?',(p['id'],))
     with pytest.raises(ProjectError):resolve_project_context(r,'chat',None,[],s)
+
+def test_project_tools_are_deterministic_and_respect_restrictions():
+    from src.project_turns import project_agent_tools
+    tools=project_agent_tools({'id':'project'})
+    assert {'ls','glob','grep','read_file','write_file','edit_file','apply_patch','get_workspace'}<=tools
+    assert not {'bash','python','web_fetch','manage_memory'} & tools
+    assert project_agent_tools(None)==set()
+    assert 'write_file' not in project_agent_tools({'id':'p'},disabled={'write_file'})
+    planned=project_agent_tools({'id':'p'},plan_mode=True)
+    assert {'read_file','grep'}<=planned
+    assert not {'write_file','edit_file','apply_patch'} & planned

@@ -9,6 +9,20 @@ from src.project_changes import ProjectChanges
 from src.project_terminal import execute_command
 
 
+PROJECT_FILE_TOOLS = frozenset({'get_workspace','ls','glob','grep','read_file','write_file','edit_file','apply_patch'})
+
+
+def project_agent_tools(project, disabled=(), plan_mode=False):
+    """Expose a small language-independent file toolset; never grant privileges."""
+    if not project:
+        return set()
+    tools = set(PROJECT_FILE_TOOLS) - set(disabled or ())
+    if plan_mode:
+        from src.tool_security import PLAN_MODE_READONLY_TOOLS
+        tools.intersection_update(PLAN_MODE_READONLY_TOOLS)
+    return tools
+
+
 def resolve_project_context(request, session_id, posted_project, references, store=None):
     store = store or ProjectStore()
     owner = effective_user(request) or '_local'

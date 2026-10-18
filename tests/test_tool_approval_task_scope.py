@@ -336,7 +336,7 @@ def test_route_context_agent_frontend_and_cache_bust_wire_the_contract():
     assert "input.value = label" not in frontend
     assert "const msg = approvalForSend ? '' : el('message').value;" in frontend
     assert "const skipBubble = _hideUserBubble || !!approvalForSend;" in frontend
-    assert "fd.append('message', approvalForSend ? '' : _finalMsgWithInject);" in frontend
+    assert "fd.append('message', approvalForSend ? '' : msg.startsWith('!') ? msg : _finalMsgWithInject);" in frontend
     assert "json.type === 'tool_approval_resolved'" in frontend
     assert "if (aq.resolved) return null;" in renderer
     assert "ev.ask_user && !ev.ask_user.resolved" in renderer

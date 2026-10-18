@@ -95,7 +95,10 @@ function renderComposer() {
   let badge=el('project-composer-mode');
   if(!badge){badge=node('div',undefined,'project-composer-mode');badge.id='project-composer-mode';badge.setAttribute('aria-live','polite');frame.insertBefore(badge,input.parentElement);}
   badge.hidden=!terminalMode(input.value)&&!activeProject;
-  badge.textContent=terminalMode(input.value)?`>_ Terminal ${activeProject&&branchLabel(activeProject.id)?'· '+branchLabel(activeProject.id):''} · ${activeProject?.root||workspace.getWorkspace()||'choose a directory'}`:activeProject?`▱ ${activeProject.name} ${branchLabel(activeProject.id)?'· '+branchLabel(activeProject.id):''} · ${activeProject.root}`:'';
+  const projectLabel=activeProject?`▱ ${activeProject.name}${branchLabel(activeProject.id)?' · '+branchLabel(activeProject.id):''}`:'';
+  badge.textContent=terminalMode(input.value)?`>_ Terminal · ${projectLabel||workspace.getWorkspace()||'choose a directory'}`:projectLabel;
+  badge.title=activeProject?.root||'';
+  if(el('chat-changes-btn'))el('chat-changes-btn').hidden=!sid();
   input.setAttribute('aria-description',terminalMode(input.value)?'Terminal mode: text after ! runs directly on the host, without AI.':'Message to AI');
   const send=document.querySelector('.send-btn');
   if(send){send.classList.toggle('project-terminal-send',terminalMode(input.value));if(terminalMode(input.value))send.title='Run terminal command';}
@@ -194,8 +197,38 @@ async function showReviews(id) {
     body.append(wrap);
   }
 }
+export async function showConversationChanges() {
+  const sessionId=sid();if(!sessionId)return;
+  const {overlay,box}=dialog('Changes');
+  box.append(node('p','Changes captured during this conversation. Concurrent manual edits can also appear.','project-note'));
+  const body=node('div',undefined,'project-conversation-reviews');box.append(body);
+  let cursor=null;
+  const load=async()=>{
+    const data=await api('/sessions/'+encodeURIComponent(sessionId)+'/reviews'+(cursor?'?cursor='+encodeURIComponent(cursor):''));
+    if(!overlay.isConnected)return;
+    body.querySelector('.project-load-older')?.remove();
+    if(!data.reviews.length&&!cursor)body.append(node('p','No tracked changes in this conversation yet. Earlier untracked edits cannot be reconstructed.','project-empty'));
+    for(const review of data.reviews){
+      const wrap=node('section',undefined,'project-review');wrap.append(node('h4',new Date(review.started*1000).toLocaleString()+' · '+review.status));
+      const summary=review.summary;
+      if(!summary)wrap.append(node('p','Comparison will be available when this turn finishes.','project-note'));
+      if(summary?.partial||review.status==='incomplete')wrap.append(node('p','Partial coverage — some changes may be omitted.','project-warning'));
+      for(const file of summary?.changes||[])wrap.append(button(file.status+' · '+file.path,async()=>{
+        const diff=await api('/sessions/'+encodeURIComponent(sessionId)+'/reviews/'+review.id+'/file?path='+encodeURIComponent(file.path));renderDiff(diff,file.path);
+      },'project-changed-file'));
+      if(summary&&!summary.changes.length)wrap.append(node('p','No eligible text changes in this turn.','project-note'));
+      body.append(wrap);
+    }
+    cursor=data.next_cursor;
+    if(cursor)body.append(button('Load older changes',load,'project-button project-load-older'));
+  };
+  await load();
+}
 async function showDiff(id,turn,path) {
-  const file=await api('/'+id+'/reviews/'+turn+'/file?path='+encodeURIComponent(path));const {overlay,box}=dialog(path);box.classList.add('project-diff-dialog');
+  const file=await api('/'+id+'/reviews/'+turn+'/file?path='+encodeURIComponent(path));renderDiff(file,path);
+}
+function renderDiff(file,path) {
+  const {box}=dialog(path);box.classList.add('project-diff-dialog');
   const result=alignDiff(file.before,file.after);
   if(result.truncated||result.approximate)box.append(node('p',result.truncated?'Display limited to 5,000 lines.':'Large change: approximate line alignment.','project-warning'));
   const title=node('div',undefined,'project-diff-head');title.append(node('strong','Original'),node('strong','Changed'));box.append(title);
@@ -219,6 +252,7 @@ async function updateAutocomplete() {
 }
 export async function initProjects(sessionModule) {
   sessions=sessionModule;
+  el('chat-changes-btn')?.addEventListener('click',()=>showConversationChanges().catch(report));
   el('project-create-btn')?.addEventListener('click',()=>createProject().catch(report));
   const input=el('message');
   input?.addEventListener('input',()=>{renderComposer();clearTimeout(fileSearchTimer);fileSearchTimer=setTimeout(()=>updateAutocomplete().catch(report),180);});

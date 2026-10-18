@@ -531,3 +531,15 @@ def test_request_workspace_gate(ws, monkeypatch):
     monkeypatch.setattr(ts, "owner_is_admin_or_single_user", lambda owner: True)
     assert cr._resolve_request_workspace(object(), ws) == (os.path.realpath(ws), "")
     assert cr._resolve_request_workspace(object(), "/nonexistent/xyz") == ("", "/nonexistent/xyz")
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('name', ['module.py','main.ts','main.rs','main.go','Main.java','main.cpp','view.vue','Dockerfile'])
+async def test_text_code_tools_across_languages(ws,admin,name):
+    _,written=await execute_tool_block(_block('write_file',name+'\nfirst\nmarker_AZUL482\nlast\n'),owner='a',workspace=ws)
+    assert written['exit_code']==0
+    _,read=await execute_tool_block(_block('read_file',json.dumps({'path':name,'offset':2,'limit':1})),owner='a',workspace=ws)
+    assert read['exit_code']==0 and 'marker_AZUL482' in read['output'] and 'last' not in read['output']
+    patch='*** Begin Patch\n*** Update File: '+name+'\n@@\n-marker_AZUL482\n+marker_EDITED\n*** End Patch'
+    _,edited=await execute_tool_block(_block('apply_patch',patch),owner='a',workspace=ws)
+    assert edited['exit_code']==0
+    assert 'marker_EDITED' in open(os.path.join(ws,name)).read()

@@ -1232,11 +1232,15 @@ def _local_computer_rules() -> str:
 def _workspace_coding_rules(workspace: Optional[str]) -> str:
     if not workspace:
         return ""
+    import platform
     return (
         "\n\n## Workspace coding mode\n"
+        f"- Actual server OS: {platform.system()} ({platform.machine()}). Do not infer Docker from an error or from a path.\n"
         f"- Active workspace: `{workspace}`. Treat relative paths as relative to this folder.\n"
         "- This mode is for coding, debugging, shell, file, build, benchmark, and repo tasks. Do not use personal-assistant tools like email, calendar, notes, memory, documents, gallery, or UI panels for workspace work.\n"
-        "- Work from the real filesystem and command output. Inspect before editing.\n"
+        "- Work from the real filesystem and command output. Inspect before editing. Never claim a file was read or changed without a successful tool result.\n"
+        "- Use grep (ripgrep when installed) to locate text/symbols across languages; then read_file with offset/limit. Do not dump or repeatedly scan the entire repository. Filesystem tools work on code text independently of language or architecture.\n"
+        "- Never use web_fetch or web_search for local files, and never invent Docker, frontend frameworks, paths or successful edits. Use get_workspace/ls and the actual tool results to establish the runtime and layout.\n"
         "- Start by orienting with `get_workspace` plus `grep`/`glob`/`ls`/`read_file`; prefer targeted reads over dumping whole files.\n"
         "- For multi-step coding work, call `todowrite` and keep the task list current.\n"
         "- Change repo files with `apply_patch` for related source edits, `edit_file` for one exact replacement, or `write_file` for new/full files. Do not use `create_document`, shell redirects, heredocs, or `sed -i` to modify repo files.\n"

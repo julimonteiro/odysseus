@@ -114,7 +114,7 @@ def test_disabled_tools_respects_missing_vs_explicit_toggles():
     assert "disabled_tools.update(WEB_TOOL_NAMES)" in source, (
         "disabled_tools must add web_search/web_fetch when web is not explicitly enabled"
     )
-    assert "_forced_tools = set(WEB_TOOL_NAMES)" in source, (
+    assert "_forced_tools |= set(WEB_TOOL_NAMES)" in source, (
         "web tools should only be forced visible from the explicit web setting"
     )
 
@@ -124,7 +124,7 @@ def test_workspace_auto_escalation_keeps_shell_tools():
     source = _CHAT_ROUTES.read_text(encoding="utf-8")
     assert '_workspace_agent_intent = _tool_intent.category in {"shell", "workspace"}' in source
     assert "allow_bash = \"true\"" in source
-    assert "if auto_escalated and not _workspace_agent_intent:" in source
+    assert "if auto_escalated and not _workspace_agent_intent and not _project:" in source
 
 
 # ── Functional tests of the disabled-tools logic ───────────────
