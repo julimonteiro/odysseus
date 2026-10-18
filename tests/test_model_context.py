@@ -312,3 +312,21 @@ class TestGetContextLength:
 
         endpoint = "http://100.117.136.97:34521/v1/chat/completions"
         assert model_context.get_context_length(endpoint, "unknown-proxy-model") == model_context.DEFAULT_CONTEXT
+
+class TestLlamaRouterContext:
+    def test_slot_query_routes_without_autoload(self,monkeypatch):
+        monkeypatch.setattr(model_context,'_configured_endpoint_kind',lambda url:'local')
+        calls=[]
+        def fake_get(url,**kwargs):
+            calls.append((url,kwargs))
+            if url.endswith('/slots') and kwargs.get('params')=={'model':'qwen3.8-27b-vision','autoload':'false'}:
+                return _FakeResp([{'n_ctx':8192}])
+            return _FakeResp({'data':[{'id':'qwen3.8-27b-vision','context_length':262144}]})
+        monkeypatch.setattr(model_context.httpx,'get',fake_get)
+        assert model_context._query_context_length('http://127.0.0.1:8081/v1','qwen3.8-27b-vision')==(8192,True)
+
+    def test_unloaded_preset_context_overrides_training_maximum(self):
+        entry={'context_length':262144,'status':{'value':'unloaded','args':['llama-server','--ctx-size','8192','--parallel','1']}}
+        assert model_context._model_ctx_from_entry(entry)==8192
+        entry['status']['args'][-1]='2'
+        assert model_context._model_ctx_from_entry(entry)==4096

@@ -324,6 +324,19 @@ def _model_ctx_from_entry(m: dict) -> Optional[int]:
     """
     if not isinstance(m, dict):
         return None
+    # Router catalogs can report the training maximum even when the preset
+    # serves a much smaller window. Its child arguments remain available while
+    # unloaded, so inspect them without loading a model just to measure context.
+    status = m.get("status")
+    args = status.get("args") if isinstance(status, dict) else None
+    if isinstance(args, list):
+        try:
+            ctx = int(args[args.index("--ctx-size") + 1])
+            parallel = int(args[args.index("--parallel") + 1]) if "--parallel" in args else 1
+            if ctx > 0 and parallel > 0:
+                return max(1, ctx // parallel)
+        except (ValueError, TypeError, IndexError):
+            pass
     for field in (
         "context_length",
         "context_window",
@@ -421,7 +434,7 @@ def _query_context_length(endpoint_url: str, model: str) -> Tuple[int, bool]:
     if is_local_endpoint(endpoint_url):
         try:
             base = endpoint_url.split("/v1")[0] if "/v1" in endpoint_url else endpoint_url.rsplit("/", 1)[0]
-            r = httpx.get(f"{base}/slots", timeout=REQUEST_TIMEOUT)
+            r = httpx.get(f"{base}/slots", params={"model": model, "autoload": "false"}, timeout=REQUEST_TIMEOUT)
             if r.is_success:
                 slots = r.json()
                 if isinstance(slots, list) and slots:
